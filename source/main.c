@@ -13,6 +13,10 @@ Inspired by example https://github.com/devkitPro/nds-examples/blob/master/dswifi
 #include <sys/socket.h>
 #include <netdb.h>
 
+#include <arpa/inet.h>
+
+#define DEST_PORT 8888
+
 Wifi_AccessPoint *findAP(void)
 {
 	int selected = 0;
@@ -90,10 +94,38 @@ Wifi_AccessPoint *findAP(void)
 	return &ap;
 }
 
-void keyPressed(int c)
-{
-	if (c > 0)
-		iprintf("%c", c);
+void sendToReceiver(const char* ip, u16 port, const char* message) {
+    int sock;
+    struct sockaddr_in server;
+
+    // Create socket
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock == -1) {
+        iprintf("Could not create socket\n");
+    } else {
+        iprintf("Socket created\n");
+    }
+
+    server.sin_addr.s_addr = inet_addr(ip);
+    server.sin_family = AF_INET;
+    server.sin_port = htons(port);
+
+    // Connect to remote server
+    if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
+        iprintf("Error: connection failed\n");
+        return;
+    }
+
+    iprintf("Connected to socket\n");
+
+    // Send the message
+    if (send(sock, message, strlen(message), 0) < 0) {
+        iprintf("Send failed");
+        return;
+    }
+    iprintf("Data Sent\n");
+
+    close(sock);
 }
 
 int main(void)
@@ -101,9 +133,6 @@ int main(void)
 	Wifi_InitDefault(false);
 
 	consoleDemoInit();
-
-	Keyboard *kb = keyboardDemoInit();
-	kb->OnKeyPressed = keyPressed;
 
 	while (1)
 	{
@@ -151,6 +180,7 @@ int main(void)
 		if (status == ASSOCSTATUS_ASSOCIATED)
 		{
 			iprintf("\nConnected\n");
+			sendToReceiver("192.168.1.12", DEST_PORT, "Hello from DS!");
 		}
 		else
 		{
