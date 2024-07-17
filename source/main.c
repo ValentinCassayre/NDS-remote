@@ -94,7 +94,7 @@ Wifi_AccessPoint *findAP(void)
 	return &ap;
 }
 
-void sendToReceiver(const char* ip, u16 port, const char* message) {
+void sendToReceiver(const char* ip, u16 port) {
     int sock;
     struct sockaddr_in server;
 
@@ -118,14 +118,30 @@ void sendToReceiver(const char* ip, u16 port, const char* message) {
 
     iprintf("Connected to socket\n");
 
-    // Send the message
-    if (send(sock, message, strlen(message), 0) < 0) {
-        iprintf("Send failed");
-        return;
+	uint32 keys_down, last_keys_down;
+
+	// Key press detection and sending loop
+    while(1) {
+
+        scanKeys(); // Prepare key state for reading
+        keys_down = keysCurrent(); // Get keys currently down
+
+		// only send if the key state has changed
+		if (keys_down != last_keys_down) {
+			iprintf("Sending %d\n", keys_down);
+			send(sock, &keys_down, sizeof(keys_down), 0);
+		}
+
+        if (keys_down & KEY_START & KEY_SELECT) { // Use START and SELECT button as exit condition
+            break;
+        }
+
+		last_keys_down = keys_down; // Store the last key state for comparison
+		swiWaitForVBlank();
     }
-    iprintf("Data Sent\n");
 
     close(sock);
+	iprintf("Socket closed\n");
 }
 
 int main(void)
@@ -145,7 +161,6 @@ int main(void)
 		Wifi_AccessPoint *ap = findAP();
 
 		consoleClear();
-		consoleSetWindow(NULL, 0, 0, 32, 10);
 
 		iprintf("Connecting to %s\n", ap->ssid);
 
@@ -180,7 +195,7 @@ int main(void)
 		if (status == ASSOCSTATUS_ASSOCIATED)
 		{
 			iprintf("\nConnected\n");
-			sendToReceiver("192.168.1.12", DEST_PORT, "Hello from DS!");
+			sendToReceiver("192.168.1.12", DEST_PORT); // hard coded IP address of the receiver
 		}
 		else
 		{

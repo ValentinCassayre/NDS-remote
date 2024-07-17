@@ -1,4 +1,5 @@
 import socket
+import struct  # Import struct module to unpack binary data
 
 PORT = 8888
 
@@ -27,10 +28,12 @@ def receive_from_ds(ip, port):
     print(f"Connection from: {addr}")
 
     while True:
-        data = conn.recv(1024)
+        data = conn.recv(4)  # Expecting 4 bytes for an unsigned int
         if not data:
             break
-        print(f"Received: {data.decode()}")
+        # Unpack the received bytes into an integer
+        count = struct.unpack('<I', data)[0]  # Use '<I' for little-endian, 'I' is for unsigned int
+        print(f"Received: {count}")
 
     conn.close()
 
@@ -38,4 +41,4 @@ def receive_from_ds(ip, port):
 if __name__ == "__main__":
     ip = get_private_ip()
     print(f"Private IP Address: {ip}")
-    receive_from_ds("0.0.0.0", PORT)
+    receive_from_ds(ip , PORT)
