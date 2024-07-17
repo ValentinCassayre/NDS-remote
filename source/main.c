@@ -94,53 +94,143 @@ Wifi_AccessPoint *findAP(void)
 	return &ap;
 }
 
-void sendToReceiver(const char* ip, u16 port) {
-    int sock;
-    struct sockaddr_in server;
+void removeLeadingZerosFromIP(const char* ip) {
+    int octet1, octet2, octet3, octet4;
+    static char newIP[16];
 
-    // Create socket
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock == -1) {
-        iprintf("Could not create socket\n");
-    } else {
-        iprintf("Socket created\n");
-    }
+    // Split the IP address into octets and convert them to integers
+    sscanf(ip, "%d.%d.%d.%d", &octet1, &octet2, &octet3, &octet4);
 
-    server.sin_addr.s_addr = inet_addr(ip);
-    server.sin_family = AF_INET;
-    server.sin_port = htons(port);
+    // Reassemble the IP address without leading zeros
+    sprintf(ip, "%d.%d.%d.%d", octet1, octet2, octet3, octet4);
+}
 
-    // Connect to remote server
-    if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
-        iprintf("Error: connection failed\n");
-        return;
-    }
+void setupReceiverIP(char *rec_ip)
+{
 
-    iprintf("Connected to socket\n");
+	int selected = 0;
+	int i = 0, j;
+	int count;
+	count = strlen(rec_ip);
+
+	Wifi_ScanMode(); // search for APs
+
+	int pressed = 0;
+
+	do
+	{
+		scanKeys();
+		pressed = keysDown();
+
+		consoleClear();
+		iprintf("Enter the IP address of the receiver\n");
+		iprintf("%s\n", rec_ip);
+
+		for(j = 0; j < count; j++)
+		{
+			iprintf((i == j) ? "*" : " ");
+		}
+
+		if (pressed & KEY_UP)
+		{
+			if (rec_ip[i] >= '0' && rec_ip[i] < '9') // Check if it's between '0' and '8'
+			{
+				rec_ip[i]++; // Increment the digit
+			}
+			else if (rec_ip[i] == '9') // If it's '9', wrap around to '0'
+			{
+				rec_ip[i] = '0';
+			}
+		}
+
+		if (pressed & KEY_DOWN)
+		{
+			if (rec_ip[i] > '0' && rec_ip[i] <= '9') // Check if it's between '1' and '9'
+			{
+				rec_ip[i]--; // Decrement the digit
+			}
+			else if (rec_ip[i] == '0') // If it's '0', wrap around to '9'
+			{
+				rec_ip[i] = '9';
+			}
+		}
+
+		if (pressed & KEY_RIGHT)
+		{
+			i = (i + 1) % count; // Move to the next character
+		}
+
+		if (pressed & KEY_LEFT)
+		{
+			i = (i - 1 + count) % count; // Move to the previous character, ensuring positive index
+		}
+
+		swiWaitForVBlank();
+	} while (!(pressed & KEY_A));
+
+	removeLeadingZerosFromIP(rec_ip);
+	consoleClear();
+}
+
+void sendToReceiver(const char *ip, u16 port)
+{
+	int sock;
+	struct sockaddr_in server;
+
+	iprintf("Connecting to %s\n", ip);
+
+	// Create socket
+	sock = socket(AF_INET, SOCK_STREAM, 0);
+	if (sock == -1)
+	{
+		iprintf("Could not create socket\n");
+	}
+	else
+	{
+		iprintf("Socket created\n");
+	}
+
+	server.sin_addr.s_addr = inet_addr(ip);
+	server.sin_family = AF_INET;
+	server.sin_port = htons(port);
+
+	// Connect to remote server
+	if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0)
+	{
+		iprintf("Error: connection failed\n");
+		return;
+	}
+
+	iprintf("Connected to socket\n");
 
 	uint32 keys_down, last_keys_down;
 
-	// Key press detection and sending loop
-    while(1) {
+	consoleSetWindow(NULL, 2, 5, 30, 22);
 
-        scanKeys(); // Prepare key state for reading
-        keys_down = keysCurrent(); // Get keys currently down
+	// Key press detection and sending loop
+	while (1)
+	{
+
+		scanKeys();				   // Prepare key state for reading
+		keys_down = keysCurrent(); // Get keys currently down
 
 		// only send if the key state has changed
-		if (keys_down != last_keys_down) {
+		if (keys_down != last_keys_down)
+		{
 			iprintf("Sending %d\n", keys_down);
 			send(sock, &keys_down, sizeof(keys_down), 0);
 		}
 
-        if (keys_down & KEY_START & KEY_SELECT) { // Use START and SELECT button as exit condition
-            break;
-        }
+		if (keys_down & KEY_START & KEY_SELECT)
+		{ // Use START and SELECT button as exit condition
+			break;
+		}
 
 		last_keys_down = keys_down; // Store the last key state for comparison
 		swiWaitForVBlank();
-    }
+	}
 
-    close(sock);
+	close(sock);
 	iprintf("Socket closed\n");
 }
 
@@ -156,7 +246,7 @@ int main(void)
 
 		// setup the window for the text console
 		consoleClear();
-		consoleSetWindow(NULL, 0, 0, 32, 24); 
+		consoleSetWindow(NULL, 0, 0, 32, 24);
 
 		Wifi_AccessPoint *ap = findAP();
 
@@ -195,7 +285,9 @@ int main(void)
 		if (status == ASSOCSTATUS_ASSOCIATED)
 		{
 			iprintf("\nConnected\n");
-			sendToReceiver("192.168.1.12", DEST_PORT); // hard coded IP address of the receiver
+			char rec_ip[16] = "192.168.001.001";
+			setupReceiverIP(rec_ip);
+			sendToReceiver(rec_ip, DEST_PORT); // hard coded IP address of the receiver
 		}
 		else
 		{
