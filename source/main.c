@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------
 
-Inspired by example https://github.com/devkitPro/nds-examples/blob/master/dswifi/ap_search/source/template.c
+Function findAP is based on the example https://github.com/devkitPro/nds-examples/blob/master/dswifi/ap_search/source/template.c
 
 ---------------------------------------------------------------------------------*/
 #include <nds.h>
@@ -14,8 +14,6 @@ Inspired by example https://github.com/devkitPro/nds-examples/blob/master/dswifi
 #include <netdb.h>
 
 #include <arpa/inet.h>
-
-#define DEST_PORT 8888
 
 Wifi_AccessPoint *findAP(void)
 {
@@ -94,90 +92,97 @@ Wifi_AccessPoint *findAP(void)
 	return &ap;
 }
 
-void removeLeadingZerosFromIP(const char* ip) {
-    int octet1, octet2, octet3, octet4;
-    static char newIP[16];
+void removeLeadingZerosFromIP(char *ip)
+{
+	int octet1, octet2, octet3, octet4;
 
-    // Split the IP address into octets and convert them to integers
-    sscanf(ip, "%d.%d.%d.%d", &octet1, &octet2, &octet3, &octet4);
-
-    // Reassemble the IP address without leading zeros
-    sprintf(ip, "%d.%d.%d.%d", octet1, octet2, octet3, octet4);
+	sscanf(ip, "%d.%d.%d.%d", &octet1, &octet2, &octet3, &octet4);
+	sprintf(ip, "%d.%d.%d.%d", octet1, octet2, octet3, octet4);
 }
 
-void setupReceiverIP(char *rec_ip)
+void removeLeadingZerosFromPort(char *port)
 {
+	int port_number;
+	sscanf(port, "%d", &port_number);
+	sprintf(port, "%d", port_number);
+}
 
+void setupReceiverIP(char *rec_ip, char *rec_port)
+{
 	int selected = 0;
-	int i = 0, j;
+	int j;
 	int count;
-	count = strlen(rec_ip);
-
-	Wifi_ScanMode(); // search for APs
+	count = strlen(rec_ip) + strlen(rec_port) + 1;
+	char *selected_pt;
 
 	int pressed = 0;
-
 	do
 	{
 		scanKeys();
 		pressed = keysDown();
 
-		consoleClear();
-		iprintf("Enter the IP address of the receiver\n");
-		iprintf("%s\n", rec_ip);
+		selected_pt = (selected < strlen(rec_ip)) ? rec_ip + selected : rec_port + selected - strlen(rec_ip) - 1;
 
-		for(j = 0; j < count; j++)
+		consoleClear();
+		iprintf("Setup the IP and port\nof the receiver\n");
+		iprintf("%d, %d, %d, %d, %c\n", strlen(rec_ip), strlen(rec_port), count, selected, *selected_pt);
+
+		iprintf("%s:%s\n", rec_ip, rec_port);
+
+		for (j = 0; j < count; j++)
 		{
-			iprintf((i == j) ? "*" : " ");
+			iprintf((selected == j) ? "*" : " ");
 		}
 
 		if (pressed & KEY_UP)
 		{
-			if (rec_ip[i] >= '0' && rec_ip[i] < '9') // Check if it's between '0' and '8'
+			if (*selected_pt >= '0' && *selected_pt < '9') // Check if it's between '0' and '8'
 			{
-				rec_ip[i]++; // Increment the digit
+				(*selected_pt)++; // Increment the digit
 			}
-			else if (rec_ip[i] == '9') // If it's '9', wrap around to '0'
+			else if (*selected_pt == '9') // If it's '9', wrap around to '0'
 			{
-				rec_ip[i] = '0';
+				*selected_pt = '0';
 			}
 		}
 
 		if (pressed & KEY_DOWN)
 		{
-			if (rec_ip[i] > '0' && rec_ip[i] <= '9') // Check if it's between '1' and '9'
+			if (*selected_pt > '0' && *selected_pt <= '9') // Check if it's between '1' and '9'
 			{
-				rec_ip[i]--; // Decrement the digit
+				(*selected_pt)--; // Decrement the digit
 			}
-			else if (rec_ip[i] == '0') // If it's '0', wrap around to '9'
+			else if (*selected_pt == '0') // If it's '0', wrap around to '9'
 			{
-				rec_ip[i] = '9';
+				*selected_pt = '9';
 			}
 		}
 
 		if (pressed & KEY_RIGHT)
 		{
-			i = (i + 1) % count; // Move to the next character
+			selected = (selected + 1) % count; // Move to the next character
 		}
 
 		if (pressed & KEY_LEFT)
 		{
-			i = (i - 1 + count) % count; // Move to the previous character, ensuring positive index
+			selected = (selected - 1 + count) % count; // Move to the previous character
 		}
 
 		swiWaitForVBlank();
 	} while (!(pressed & KEY_A));
 
-	removeLeadingZerosFromIP(rec_ip);
 	consoleClear();
+
+	removeLeadingZerosFromIP(rec_ip);
+	removeLeadingZerosFromPort(rec_port);
 }
 
-void sendToReceiver(const char *ip, u16 port)
+void sendToReceiver(char *rec_ip, char *rec_port)
 {
 	int sock;
 	struct sockaddr_in server;
 
-	iprintf("Connecting to %s\n", ip);
+	iprintf("Connecting to %s:%s\n", rec_ip, rec_port);
 
 	// Create socket
 	sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -190,9 +195,9 @@ void sendToReceiver(const char *ip, u16 port)
 		iprintf("Socket created\n");
 	}
 
-	server.sin_addr.s_addr = inet_addr(ip);
+	server.sin_addr.s_addr = inet_addr(rec_ip);
 	server.sin_family = AF_INET;
-	server.sin_port = htons(port);
+	server.sin_port = htons(atoi(rec_port));
 
 	// Connect to remote server
 	if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0)
@@ -203,7 +208,7 @@ void sendToReceiver(const char *ip, u16 port)
 
 	iprintf("Connected to socket\n");
 
-	uint32 keys_down, last_keys_down;
+	uint32 keys_down, last_keys_down = 0;
 
 	consoleSetWindow(NULL, 2, 5, 30, 22);
 
@@ -217,7 +222,7 @@ void sendToReceiver(const char *ip, u16 port)
 		// only send if the key state has changed
 		if (keys_down != last_keys_down)
 		{
-			iprintf("Sending %d\n", keys_down);
+			iprintf("Sending %ld\n", keys_down);
 			send(sock, &keys_down, sizeof(keys_down), 0);
 		}
 
@@ -270,8 +275,7 @@ int main(void)
 		{
 
 			status = Wifi_AssocStatus();
-			int len = strlen(ASSOCSTATUS_STRINGS[status]);
-			iprintf("\x1b[0;0H\x1b[K"); // clear the line
+			consoleClear();
 			iprintf("%s", ASSOCSTATUS_STRINGS[status]);
 
 			scanKeys();
@@ -286,8 +290,9 @@ int main(void)
 		{
 			iprintf("\nConnected\n");
 			char rec_ip[16] = "192.168.001.001";
-			setupReceiverIP(rec_ip);
-			sendToReceiver(rec_ip, DEST_PORT); // hard coded IP address of the receiver
+			char rec_port[5] = "8888";
+			setupReceiverIP(rec_ip, rec_port);
+			sendToReceiver(rec_ip, rec_port);
 		}
 		else
 		{
